@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — GoalFlow</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body class="login-body">
+
+<div class="login-container">
+  <!-- Brand -->
+  <div class="login-brand">
+    <span class="brand-icon-lg">◎</span>
+    <h1 class="brand-title">GoalFlow</h1>
+    <p class="brand-sub">Goal Setting &amp; Tracking Portal</p>
+  </div>
+
+  <!-- Error banner -->
+  {% if error %}
+  <div class="flash flash-error">✕ {{ error }}</div>
+  {% endif %}
+
+  <!-- Login form -->
+  <form class="login-form" method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}" />
+
+    <div class="form-group">
+      <label for="email" class="form-label">Email Address</label>
+      <input
+        id="email"
+        type="email"
+        name="email"
+        class="form-input"
+        placeholder="you@company.com"
+        required
+        autofocus
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="password" class="form-label">Password</label>
+      <input
+        id="password"
+        type="password"
+        name="password"
+        class="form-input"
+        placeholder="••••••••"
+        required
+      />
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+  </form>
+
+  <!-- Demo credentials hint -->
+  <details class="demo-creds">
+    <summary>Demo Credentials</summary>
+    <table class="creds-table">
+      <thead>
+        <tr><th>Role</th><th>Email</th><th>Password</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-admin">Admin</span></td>
+          <td>admin@demo.com</td>
+          <td>demo123</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-manager">Manager</span></td>
+          <td>manager@demo.com</td>
+          <td>demo123</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-employee">Employee</span></td>
+          <td>employee@demo.com</td>
+          <td>demo123</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="creds-note">Click a row to auto-fill credentials.</p>
+  </details>
+</div>
+
+<script>
+  // Click on a demo credential row to auto-fill the form
+  document.querySelectorAll('.creds-table tbody tr').forEach(row => {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => {
+      document.getElementById('email').value    = row.cells[1].textContent.trim();
+      document.getElementById('password').value = row.cells[2].textContent.trim();
+    });
+  });
+</script>
+</body>
+</html>

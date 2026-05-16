@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}GoalFlow{% endblock %} — GoalFlow</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ SIDEBAR -->
+{% if user is defined and user %}
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand-icon">◎</span>
+    <span class="brand-name">GoalFlow</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    {% if user.role == "employee" %}
+      <a href="/employee/dashboard"  class="nav-item {% if request.url.path == '/employee/dashboard' %}active{% endif %}">
+        <span class="nav-icon">⊞</span> Dashboard
+      </a>
+      <a href="/employee/goals"      class="nav-item {% if '/employee/goals' in request.url.path %}active{% endif %}">
+        <span class="nav-icon">◈</span> My Goals
+      </a>
+      <a href="/employee/updates"    class="nav-item {% if '/employee/updates' in request.url.path %}active{% endif %}">
+        <span class="nav-icon">↗</span> Quarterly Updates
+      </a>
+
+    {% elif user.role == "manager" %}
+      <a href="/manager/dashboard"   class="nav-item {% if request.url.path == '/manager/dashboard' %}active{% endif %}">
+        <span class="nav-icon">⊞</span> Dashboard
+      </a>
+      <a href="/manager/approvals"   class="nav-item {% if '/manager/approvals' in request.url.path %}active{% endif %}">
+        <span class="nav-icon">✓</span> Approvals
+      </a>
+
+    {% elif user.role == "admin" %}
+      <a href="/admin/dashboard"     class="nav-item {% if request.url.path == '/admin/dashboard' %}active{% endif %}">
+        <span class="nav-icon">⊞</span> Dashboard
+      </a>
+      <a href="/admin/cycles"        class="nav-item {% if '/admin/cycles' in request.url.path %}active{% endif %}">
+        <span class="nav-icon">◷</span> Cycles
+      </a>
+      <a href="/admin/shared-goals"  class="nav-item {% if '/admin/shared-goals' in request.url.path %}active{% endif %}">
+        <span class="nav-icon">⇄</span> Shared Goals
+      </a>
+      <a href="/admin/unlock"        class="nav-item {% if '/admin/unlock' in request.url.path %}active{% endif %}">
+        <span class="nav-icon">⊘</span> Unlock Goals
+      </a>
+      <a href="/admin/reports"       class="nav-item {% if '/admin/reports' in request.url.path %}active{% endif %}">
+        <span class="nav-icon">▤</span> Reports
+      </a>
+      <a href="/admin/audit"         class="nav-item {% if '/admin/audit' in request.url.path %}active{% endif %}">
+        <span class="nav-icon">☰</span> Audit Logs
+      </a>
+    {% endif %}
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="user-chip">
+      <div class="user-avatar">{{ user.name[0].upper() }}</div>
+      <div class="user-info">
+        <span class="user-name">{{ user.name }}</span>
+        <span class="user-role badge badge-{{ user.role }}">{{ user.role | capitalize }}</span>
+      </div>
+    </div>
+    <a href="/logout" class="logout-btn" title="Sign out">⏻</a>
+  </div>
+</aside>
+{% endif %}
+
+<!-- ═══════════════════════════════════════════════════════════ MAIN -->
+<main class="main-content {% if not (user is defined and user) %}full-width{% endif %}">
+
+  <!-- Topbar -->
+  {% if user is defined and user %}
+  <header class="topbar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
+    <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+    <div class="topbar-right">
+      {% if active_cycle %}
+        <div class="cycle-countdown-banner">
+          ⏱ <strong>{{ active_cycle.name }}</strong>
+          closes <strong>{{ active_cycle.end_date }}</strong>
+        </div>
+      {% endif %}
+    </div>
+  </header>
+  {% endif %}
+
+  <!-- Flash messages -->
+  {% if flash_success %}
+    <div class="flash flash-success">✓ {{ flash_success }}</div>
+  {% endif %}
+  {% if flash_error %}
+    <div class="flash flash-error">✕ {{ flash_error }}</div>
+  {% endif %}
+  {% if flash_info %}
+    <div class="flash flash-info">ℹ {{ flash_info }}</div>
+  {% endif %}
+
+  <!-- Page content -->
+  <div class="page-body">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+<script src="/static/js/utils.js"></script>
+{% block scripts %}{% endblock %}
+<script>
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('collapsed');
+    document.querySelector('.main-content').classList.toggle('expanded');
+  }
+</script>
+</body>
+</html>
