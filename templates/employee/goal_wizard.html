@@ -1,9 +1,480 @@
 {% extends "base.html" %}
 {% block title %}Goal Wizard{% endblock %}
 {% block page_title %}Goal Creation Wizard{% endblock %}
+{% block head %}
+<script src="/static/js/weightage_meter.js" defer></script>
+{% endblock %}
+
 {% block content %}
-<div class="placeholder-card">
-  <h2>Goal Creation Wizard</h2>
-  <p>Module implementation pending — Phase 2.</p>
+
+{# ═══ Wizard Step Indicator ════════════════════════════════════════════════ #}
+<div class="wizard-steps" id="wizard-steps">
+  <div class="wizard-step" id="step-ind-1">
+    <div class="wizard-step-dot">1</div>
+    <span class="wizard-step-label">Add Goals</span>
+  </div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step" id="step-ind-2">
+    <div class="wizard-step-dot">2</div>
+    <span class="wizard-step-label">Preview &amp; Validate</span>
+  </div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step" id="step-ind-3">
+    <div class="wizard-step-dot">3</div>
+    <span class="wizard-step-label">Submit</span>
+  </div>
 </div>
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   STEP 1 — Add / Edit / Delete Goals
+═══════════════════════════════════════════════════════════════════════════ #}
+<div id="wizard-step-1">
+
+  {# ── Weightage Meter ─────────────────────────────────────────────────── #}
+  <div class="card" style="padding:1.25rem 1.5rem">
+    <div class="flex-between" style="margin-bottom:.5rem">
+      <span class="card-title">Weightage Allocation</span>
+      <span id="weightage-label" style="font-weight:700;font-size:.9375rem">
+        {{ "%.0f"|format(total_weight) }}% allocated
+      </span>
+    </div>
+    <div id="weightage-meter"
+         class="weightage-meter {% if total_weight < 100 %}weightage-under{% elif total_weight == 100 %}weightage-ok{% else %}weightage-over{% endif %}">
+      <div class="weightage-meter-bar">
+        <div class="weightage-meter-fill"
+             id="weightage-fill"
+             style="width:{{ [total_weight, 100] | min }}%"></div>
+      </div>
+    </div>
+    <div id="weightage-hint" class="form-hint" style="margin-top:.375rem">
+      {% if total_weight < 100 %}
+        {{ "%.0f"|format(100 - total_weight) }}% remaining to allocate.
+      {% elif total_weight == 100 %}
+        Perfect — total weightage is exactly 100%.
+      {% else %}
+        Over by {{ "%.0f"|format(total_weight - 100) }}% — reduce before submitting.
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Existing Goals Table ────────────────────────────────────────────── #}
+  {% if goals %}
+  <div class="card" style="padding:0">
+    <div class="card-header" style="padding:1rem 1.5rem">
+      <span class="card-title">Goals ({{ goals|length }} / {{ max_goals }})</span>
+    </div>
+    <div class="table-wrapper" style="border:none;border-radius:0">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Thrust Area</th>
+            <th>Goal Title</th>
+            <th>UoM</th>
+            <th>Target</th>
+            <th style="text-align:right">Weightage</th>
+            <th style="text-align:center;width:100px">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in goals %}
+          <tr id="goal-row-{{ g.id }}" data-goal-weight="{{ g.weightage }}">
+            <td class="text-muted">{{ loop.index }}</td>
+            <td>{{ g.thrust_area }}</td>
+            <td>
+              <strong>{{ g.title }}</strong>
+              {% if g.description %}
+                <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">
+                  {{ g.description[:80] }}{% if g.description|length > 80 %}…{% endif %}
+                </div>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-draft">{{ g.uom_type | upper }}</span>
+            </td>
+            <td>{{ g.target_value }}</td>
+            <td style="text-align:right;font-weight:700">{{ "%.0f"|format(g.weightage) }}%</td>
+            <td style="text-align:center">
+              <div class="btn-group" style="justify-content:center;gap:.375rem">
+                <button class="btn btn-secondary btn-sm"
+                        onclick="openEditModal({{ g.id }}, {{ g.thrust_area|tojson }}, {{ g.title|tojson }}, {{ (g.description or '')|tojson }}, '{{ g.uom_type }}', {{ g.target_value }}, {{ g.weightage }})">✎</button>
+                <form method="post" action="/employee/goals/{{ g.id }}/delete"
+                      onsubmit="return confirm('Delete goal \'{{ g.title }}\'?')">
+                  <button type="submit" class="btn btn-danger btn-sm">✕</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state" style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--border-radius-lg);margin-bottom:1.25rem">
+    <div class="empty-state-icon">◈</div>
+    <div class="empty-state-title">No goals yet</div>
+    <div class="empty-state-desc">Use the form below to add your first goal.</div>
+  </div>
+  {% endif %}
+
+  {# ── Add Goal Form ───────────────────────────────────────────────────── #}
+  {% if goals|length < max_goals %}
+  <div class="card" id="add-goal-card">
+    <div class="card-header">
+      <span class="card-title">Add New Goal</span>
+      <span class="text-muted" style="font-size:.8125rem">{{ max_goals - goals|length }} slot(s) remaining</span>
+    </div>
+    <form method="post" action="/employee/goals" id="add-goal-form">
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label class="form-label">Thrust Area <span class="req">*</span></label>
+          <input type="text" name="thrust_area" class="form-input"
+                 placeholder="e.g. Revenue Growth, Customer Satisfaction"
+                 required maxlength="120">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Goal Title <span class="req">*</span></label>
+          <input type="text" name="title" class="form-input"
+                 placeholder="e.g. Achieve ₹10Cr Q1 Revenue"
+                 required maxlength="200">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-textarea" rows="2"
+                  placeholder="Optional: context, how it will be measured, dependencies…"
+                  maxlength="500"></textarea>
+      </div>
+
+      <div class="form-row cols-3">
+        <div class="form-group">
+          <label class="form-label">UoM Type <span class="req">*</span></label>
+          <select name="uom_type" class="form-select" required id="add-uom-select">
+            <option value="" disabled selected>— Select —</option>
+            {% for val, label in uom_labels.items() %}
+              <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-hint" id="uom-hint"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Value <span class="req">*</span></label>
+          <input type="number" name="target_value" class="form-input"
+                 placeholder="e.g. 1000000" step="any" required min="0"
+                 id="add-target-input">
+          <div class="form-hint" id="target-hint">Numeric target (units, %, date — based on UoM)</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weightage % <span class="req">*</span></label>
+          <input type="number" name="weightage" class="form-input weightage-input"
+                 placeholder="e.g. 20" step="1" required
+                 min="{{ min_weight }}" max="100"
+                 id="add-weightage-input">
+          <div class="form-hint">Min {{ min_weight }}% · Total must = 100%</div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button type="submit" class="btn btn-primary" id="add-goal-btn">+ Add Goal</button>
+        <button type="reset" class="btn btn-secondary" onclick="resetAddForm()">Clear</button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div class="flash flash-info">
+    Maximum {{ max_goals }} goals reached. Delete a goal to add a new one.
+  </div>
+  {% endif %}
+
+  {# ── Step 1 → Step 2 button ──────────────────────────────────────────── #}
+  <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+    <button class="btn btn-primary"
+            id="go-preview-btn"
+            onclick="goToStep(2)"
+            {% if not goals %}disabled title="Add at least one goal first"{% endif %}>
+      Preview &amp; Validate →
+    </button>
+  </div>
+</div>{# /wizard-step-1 #}
+
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   STEP 2 — Preview & Validate
+═══════════════════════════════════════════════════════════════════════════ #}
+<div id="wizard-step-2" style="display:none">
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Goal Sheet Preview</span>
+      <span class="badge badge-{{ sheet.status }}">{{ sheet.status | capitalize }}</span>
+    </div>
+
+    {% if goals %}
+    <div class="table-wrapper" style="border:none;border-radius:0">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Thrust Area</th><th>Goal Title</th>
+            <th>Description</th><th>UoM</th><th>Target</th>
+            <th style="text-align:right">Weightage</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in goals %}
+          <tr>
+            <td class="text-muted">{{ loop.index }}</td>
+            <td><strong>{{ g.thrust_area }}</strong></td>
+            <td>{{ g.title }}</td>
+            <td style="color:var(--text-secondary);max-width:200px">{{ g.description or "—" }}</td>
+            <td>
+              <span class="badge badge-draft">{{ g.uom_type | upper }}</span>
+              <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">
+                {{ uom_labels[g.uom_type] if g.uom_type in uom_labels else "" }}
+              </div>
+            </td>
+            <td>{{ g.target_value }}</td>
+            <td style="text-align:right;font-weight:700">{{ "%.0f"|format(g.weightage) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:var(--bg-page)">
+            <td colspan="6" style="font-weight:700;text-align:right;padding:.75rem 1rem">Total</td>
+            <td style="text-align:right;font-weight:800;font-size:1rem;padding:.75rem 1rem;
+                color:{% if total_weight == 100 %}var(--green){% elif total_weight > 100 %}var(--red){% else %}var(--yellow){% endif %}">
+              {{ "%.0f"|format(total_weight) }}%
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    {% endif %}
+
+    {# ── Validation panel ─────────────────────────────────────────────── #}
+    <div style="padding:1.25rem 1.5rem;border-top:1px solid var(--border-color)">
+      <div style="font-weight:600;margin-bottom:.75rem">Validation Checklist</div>
+      <div class="validation-list">
+        {% set gc = goals|length %}
+        <div class="val-item {% if gc > 0 and gc <= max_goals %}val-pass{% else %}val-fail{% endif %}">
+          {% if gc > 0 and gc <= max_goals %}✓{% else %}✕{% endif %}
+          {{ gc }} goal(s) defined (max {{ max_goals }})
+        </div>
+        {% set bad_weight = goals | selectattr('weightage', 'lt', min_weight) | list %}
+        <div class="val-item {% if not bad_weight %}val-pass{% else %}val-fail{% endif %}">
+          {% if not bad_weight %}✓{% else %}✕{% endif %}
+          All goals have ≥ {{ min_weight }}% weightage
+          {% if bad_weight %}
+            — failing: {% for g in bad_weight %}"{{ g.title }}" ({{ "%.0f"|format(g.weightage) }}%){% if not loop.last %}, {% endif %}{% endfor %}
+          {% endif %}
+        </div>
+        <div class="val-item {% if total_weight == 100 %}val-pass{% else %}val-fail{% endif %}">
+          {% if total_weight == 100 %}✓{% else %}✕{% endif %}
+          Total weightage = 100%
+          {% if total_weight != 100 %}(currently {{ "%.1f"|format(total_weight) }}%){% endif %}
+        </div>
+      </div>
+
+      {% if val_errors %}
+        <div class="flash flash-error" style="margin:1rem 0 0">
+          ✕ Fix the issues above before submitting.
+        </div>
+      {% else %}
+        <div class="flash flash-success" style="margin:1rem 0 0">
+          ✓ All checks passed — ready to submit.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="btn-group" style="justify-content:space-between;margin-top:.5rem">
+    <button class="btn btn-secondary" onclick="goToStep(1)">← Back to Edit</button>
+    <button class="btn btn-primary" onclick="goToStep(3)"
+            {% if val_errors %}disabled title="Fix validation errors first"{% endif %}>
+      Proceed to Submit →
+    </button>
+  </div>
+</div>{# /wizard-step-2 #}
+
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   STEP 3 — Confirm & Submit
+═══════════════════════════════════════════════════════════════════════════ #}
+<div id="wizard-step-3" style="display:none">
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Confirm Submission</span>
+    </div>
+    <div style="padding:1.5rem">
+      <p style="color:var(--text-secondary);margin-bottom:1.5rem;line-height:1.7">
+        You are about to submit your goal sheet for <strong>manager approval</strong>.
+        Once submitted, you will <strong>not be able to edit</strong> your goals unless
+        your manager returns the sheet for revision.
+      </p>
+
+      <div class="submit-summary">
+        <div class="submit-summary-row">
+          <span>Goals</span><strong>{{ goals|length }}</strong>
+        </div>
+        <div class="submit-summary-row">
+          <span>Total Weightage</span>
+          <strong style="color:{% if total_weight == 100 %}var(--green){% else %}var(--red){% endif %}">
+            {{ "%.0f"|format(total_weight) }}%
+          </strong>
+        </div>
+        <div class="submit-summary-row">
+          <span>Cycle</span><strong>{{ cycle.name }}</strong>
+        </div>
+        <div class="submit-summary-row">
+          <span>Submitting As</span><strong>{{ user.name }}</strong>
+        </div>
+      </div>
+
+      {% if val_errors %}
+        <div class="flash flash-error">
+          ✕ Cannot submit — validation errors exist. Go back and fix them.
+        </div>
+      {% else %}
+        <form method="post" action="/employee/goals/submit" id="submit-form">
+          <div class="btn-group" style="margin-top:1.5rem">
+            <button class="btn btn-secondary" type="button" onclick="goToStep(2)">← Back</button>
+            <button class="btn btn-success" type="submit" id="submit-btn">
+              ✓ Submit for Manager Approval
+            </button>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>{# /wizard-step-3 #}
+
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   EDIT GOAL MODAL
+═══════════════════════════════════════════════════════════════════════════ #}
+<div id="edit-modal" class="modal-backdrop" style="display:none" onclick="closeEditModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Edit Goal</span>
+      <button class="modal-close" onclick="closeEditModal()">&times;</button>
+    </div>
+    <form method="post" id="edit-goal-form" action="">
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label class="form-label">Thrust Area *</label>
+          <input type="text" name="thrust_area" id="edit-thrust" class="form-input"
+                 required maxlength="120">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Goal Title *</label>
+          <input type="text" name="title" id="edit-title" class="form-input"
+                 required maxlength="200">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea name="description" id="edit-description" class="form-textarea"
+                  rows="2" maxlength="500"></textarea>
+      </div>
+      <div class="form-row cols-3">
+        <div class="form-group">
+          <label class="form-label">UoM Type *</label>
+          <select name="uom_type" id="edit-uom" class="form-select" required>
+            {% for val, label in uom_labels.items() %}
+              <option value="{{ val }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Value *</label>
+          <input type="number" name="target_value" id="edit-target" class="form-input"
+                 step="any" required min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weightage % *</label>
+          <input type="number" name="weightage" id="edit-weightage" class="form-input weightage-input"
+                 step="1" required min="{{ min_weight }}" max="100">
+          <div class="form-hint">Min {{ min_weight }}%</div>
+        </div>
+      </div>
+      <div class="btn-group" style="margin-top:.5rem">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ─── Wizard step control ─────────────────────────────────────────────────────
+const TOTAL_STEPS = 3;
+
+function goToStep(n) {
+  for (let i = 1; i <= TOTAL_STEPS; i++) {
+    document.getElementById(`wizard-step-${i}`).style.display = (i === n) ? '' : 'none';
+    const ind = document.getElementById(`step-ind-${i}`);
+    ind.classList.remove('active', 'complete');
+    if (i < n)  ind.classList.add('complete');
+    if (i === n) ind.classList.add('active');
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Activate step 1 on load
+document.addEventListener('DOMContentLoaded', () => goToStep(1));
+
+// ─── UoM hint text ────────────────────────────────────────────────────────────
+const UOM_HINTS = {
+  min:      'Higher actual = better. Score = (Actual ÷ Target) × 100.',
+  max:      'Lower actual = better (e.g. defects, TAT). Score = (Target ÷ Actual) × 100.',
+  timeline: 'Goal is date-driven. 100% if completed on or before deadline.',
+  zero:     'Zero incidents = 100%. Any occurrence = 0%.',
+};
+
+document.getElementById('add-uom-select')?.addEventListener('change', function () {
+  document.getElementById('uom-hint').textContent = UOM_HINTS[this.value] || '';
+  const targetHint = document.getElementById('target-hint');
+  if (this.value === 'timeline') {
+    targetHint.textContent = 'Enter target as days from cycle start, or use a milestone date.';
+  } else if (this.value === 'zero') {
+    targetHint.textContent = 'Target = 0 (zero incidents/occurrences).';
+  } else {
+    targetHint.textContent = 'Numeric target (units, ₹, %, count…)';
+  }
+});
+
+// ─── Reset add form ───────────────────────────────────────────────────────────
+function resetAddForm() {
+  document.getElementById('add-goal-form').reset();
+  document.getElementById('uom-hint').textContent = '';
+  document.getElementById('target-hint').textContent = 'Numeric target (units, %, date — based on UoM)';
+}
+
+// ─── Edit modal ───────────────────────────────────────────────────────────────
+function openEditModal(goalId, thrustArea, title, description, uomType, targetValue, weightage) {
+  document.getElementById('edit-goal-form').action    = `/employee/goals/${goalId}/edit`;
+  document.getElementById('edit-thrust').value        = thrustArea;
+  document.getElementById('edit-title').value         = title;
+  document.getElementById('edit-description').value   = description || '';
+  document.getElementById('edit-uom').value           = uomType;
+  document.getElementById('edit-target').value        = targetValue;
+  document.getElementById('edit-weightage').value     = weightage;
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function closeEditModal(event) {
+  if (!event || event.target === document.getElementById('edit-modal')) {
+    document.getElementById('edit-modal').style.display = 'none';
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeEditModal();
+});
+</script>
 {% endblock %}

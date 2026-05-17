@@ -1,10 +1,126 @@
 {% extends "base.html" %}
 {% block title %}My Goals{% endblock %}
 {% block page_title %}My Goals{% endblock %}
+
 {% block content %}
-<div class="placeholder-card">
-  <h2>My Goals</h2>
-  <p>Module implementation pending — Phase 2.</p>
-  <a href="/employee/goals/wizard" class="btn btn-primary">+ Add Goals</a>
+
+{# ── Sheet header ─────────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <span class="card-title">Goal Sheet</span>
+      {% if sheet %}
+        <span class="badge badge-{{ sheet.status }}" style="margin-left:.5rem">
+          {{ sheet.status | capitalize }}
+        </span>
+      {% endif %}
+    </div>
+    <div class="btn-group">
+      {% if sheet and sheet.status in ["draft", "returned"] %}
+        <a href="/employee/goals/wizard" class="btn btn-primary btn-sm">✎ Edit Goals</a>
+      {% endif %}
+      {% if not sheet or sheet.status == "draft" %}
+        {% if cycle %}
+          <a href="/employee/goals/wizard" class="btn btn-primary btn-sm">+ Add Goals</a>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not cycle and not sheet %}
+    <div class="empty-state">
+      <div class="empty-state-icon">⊘</div>
+      <div class="empty-state-title">No Active Cycle</div>
+      <div class="empty-state-desc">No goal-setting cycle is currently open. Please contact your HR Admin.</div>
+    </div>
+  {% elif not sheet or not goals %}
+    <div class="empty-state">
+      <div class="empty-state-icon">◈</div>
+      <div class="empty-state-title">No Goals Yet</div>
+      <div class="empty-state-desc">
+        {% if cycle %}
+          The goal-setting cycle is open. Click "Add Goals" to get started.
+        {% else %}
+          No goal-setting cycle is currently active.
+        {% endif %}
+      </div>
+      {% if cycle %}
+        <a href="/employee/goals/wizard" class="btn btn-primary" style="margin-top:1rem">+ Create My Goals</a>
+      {% endif %}
+    </div>
+  {% else %}
+    {# ── Goals table ──────────────────────────────────────────────────── #}
+    <div class="table-wrapper" style="border:none">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>Thrust Area</th>
+            <th>Goal Title</th>
+            <th>Description</th>
+            <th>UoM Type</th>
+            <th>Target</th>
+            <th style="text-align:right">Weightage</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in goals %}
+          <tr>
+            <td class="text-muted">{{ loop.index }}</td>
+            <td><strong>{{ g.thrust_area }}</strong></td>
+            <td>{{ g.title }}</td>
+            <td style="max-width:220px;color:var(--text-secondary)">
+              {{ g.description or "—" }}
+            </td>
+            <td>
+              {% set uom = uom_labels[g.uom_type] if g.uom_type in uom_labels else g.uom_type %}
+              <span class="badge badge-draft" title="{{ uom }}">{{ g.uom_type | upper }}</span>
+            </td>
+            <td>{{ g.target_value }}</td>
+            <td style="text-align:right;font-weight:700">{{ "%.0f"|format(g.weightage) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:var(--bg-page)">
+            <td colspan="6" style="font-weight:700;text-align:right;padding:.75rem 1rem">
+              Total Weightage
+            </td>
+            {% set total = goals | sum(attribute='weightage') %}
+            <td style="text-align:right;font-weight:800;padding:.75rem 1rem;font-size:1rem;
+                color:{% if total == 100 %}var(--green){% elif total > 100 %}var(--red){% else %}var(--yellow){% endif %}">
+              {{ "%.0f"|format(total) }}%
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    {# ── Status messages ──────────────────────────────────────────────── #}
+    <div style="padding:1rem 1.5rem;border-top:1px solid var(--border-color)">
+      {% if sheet.status == "submitted" %}
+        <div class="flash flash-info" style="margin:0">
+          ✓ Submitted on {{ sheet.submitted_at.strftime('%d %b %Y, %H:%M') if sheet.submitted_at else "—" }}
+          — awaiting manager approval.
+        </div>
+      {% elif sheet.status == "approved" %}
+        <div class="flash flash-success" style="margin:0">
+          ✓ Approved on {{ sheet.approved_at.strftime('%d %b %Y, %H:%M') if sheet.approved_at else "—" }}
+          — goals are locked.
+        </div>
+      {% elif sheet.status == "returned" %}
+        <div class="flash flash-error" style="margin:0">
+          ✕ Returned for revision.
+          <a href="/employee/goals/wizard" style="color:inherit;font-weight:700">Edit and resubmit →</a>
+        </div>
+      {% elif sheet.status == "draft" %}
+        <div class="flash flash-info" style="margin:0">
+          Draft — not yet submitted.
+          <a href="/employee/goals/wizard" style="color:inherit;font-weight:700">Go to wizard →</a>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
 </div>
+
 {% endblock %}
