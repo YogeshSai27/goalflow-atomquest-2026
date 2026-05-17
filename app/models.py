@@ -79,6 +79,8 @@ class GoalSheet(Base):
     unlock_reason = Column(Text, nullable=True)
     unlocked_by  = Column(Integer, ForeignKey("users.id"), nullable=True)
     unlocked_at  = Column(DateTime, nullable=True)
+    manager_comments = Column(Text, nullable=True)   # overall approval comments
+    return_reason    = Column(Text, nullable=True)   # reason when returned
     created_at   = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

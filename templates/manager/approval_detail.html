@@ -1,10 +1,279 @@
 {% extends "base.html" %}
-{% block title %}Review Goal Sheet{% endblock %}
-{% block page_title %}Review Goal Sheet{% endblock %}
+{% block title %}Review: {{ employee.name }}{% endblock %}
+{% block page_title %}Review Goal Sheet — {{ employee.name }}{% endblock %}
+
 {% block content %}
-<div class="placeholder-card">
-  <h2>Goal Sheet Review</h2>
-  <p>Sheet ID: {{ sheet_id }}</p>
-  <p>Module implementation pending — Phase 3.</p>
+
+{# ═══ Sheet Header Info ════════════════════════════════════════════════════ #}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <span class="card-title">{{ employee.name }}</span>
+      <span class="badge badge-{{ sheet.status }}" style="margin-left:.5rem">
+        {{ sheet.status | capitalize }}
+      </span>
+      {% if sheet.is_unlocked %}
+        <span class="badge badge-watch" style="margin-left:.375rem" title="Admin unlocked">🔓 Unlocked</span>
+      {% endif %}
+    </div>
+    <a href="/manager/approvals" class="btn btn-secondary btn-sm">← Back to List</a>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-cell">
+      <span class="info-label">Department</span>
+      <span class="info-value">{{ employee.department or '—' }}</span>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Submitted</span>
+      <span class="info-value">
+        {{ sheet.submitted_at.strftime('%d %b %Y, %H:%M') if sheet.submitted_at else '—' }}
+      </span>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Goals</span>
+      <span class="info-value">{{ goals | length }} / 8</span>
+    </div>
+    <div class="info-cell">
+      <span class="info-label">Total Weightage</span>
+      <span class="info-value"
+            style="font-weight:700;color:{% if total_weight == 100 %}var(--green){% else %}var(--red){% endif %}">
+        {{ "%.0f"|format(total_weight) }}%
+      </span>
+    </div>
+  </div>
+
+  {% if sheet.return_reason %}
+  <div style="padding:.75rem 1.5rem;background:var(--red-bg);border-top:1px solid var(--red-border)">
+    <span style="font-weight:600;color:var(--red)">Previously Returned:</span>
+    <span style="color:var(--red);margin-left:.5rem">{{ sheet.return_reason }}</span>
+  </div>
+  {% endif %}
 </div>
+
+{# ═══ Validation Panel ════════════════════════════════════════════════════ #}
+{% if sheet.status == 'submitted' %}
+<div class="card" style="padding:1rem 1.5rem">
+  <div style="font-weight:600;margin-bottom:.625rem;font-size:.875rem">Validation</div>
+  <div class="validation-list">
+    {% set bad_w = goals | selectattr('weightage','lt',10) | list %}
+    <div class="val-item {% if not bad_w %}val-pass{% else %}val-fail{% endif %}">
+      {% if not bad_w %}✓{% else %}✕{% endif %}
+      All goals ≥ 10% weightage
+      {% if bad_w %} — failing: {% for g in bad_w %}"{{ g.title }}" ({{ "%.0f"|format(g.weightage) }}%){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+    </div>
+    <div class="val-item {% if total_weight == 100 %}val-pass{% else %}val-fail{% endif %}">
+      {% if total_weight == 100 %}✓{% else %}✕{% endif %}
+      Total weightage = 100% (currently {{ "%.1f"|format(total_weight) }}%)
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ═══ Goals Table — Inline Editable ═══════════════════════════════════════ #}
+<div class="card" style="padding:0">
+  <div class="card-header" style="padding:1rem 1.5rem">
+    <span class="card-title">Goal Details</span>
+    {% if sheet.status == 'submitted' %}
+      <span class="text-muted" style="font-size:.8125rem">
+        ✎ Click <strong>Edit</strong> on any row to adjust target or weightage
+      </span>
+    {% endif %}
+  </div>
+
+  <div class="table-wrapper" style="border:none;border-radius:0">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:32px">#</th>
+          <th>Thrust Area</th>
+          <th>Goal Title</th>
+          <th>Description</th>
+          <th>UoM</th>
+          <th style="text-align:right">Target</th>
+          <th style="text-align:right">Weightage</th>
+          {% if sheet.status == 'submitted' %}
+          <th style="text-align:center;width:80px">Edit</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in goals %}
+        <tr id="goal-row-{{ g.id }}">
+          <td class="text-muted">{{ loop.index }}</td>
+          <td><strong>{{ g.thrust_area }}</strong></td>
+          <td>
+            {{ g.title }}
+            {% if g.is_shared %}
+              <span class="badge badge-admin" style="margin-left:.375rem;font-size:.6rem">Shared</span>
+            {% endif %}
+          </td>
+          <td style="max-width:180px;color:var(--text-secondary)">{{ g.description or '—' }}</td>
+          <td>
+            <span class="badge badge-draft" title="{{ uom_labels.get(g.uom_type,'') }}">
+              {{ g.uom_type | upper }}
+            </span>
+          </td>
+          <td style="text-align:right" id="target-display-{{ g.id }}">{{ g.target_value }}</td>
+          <td style="text-align:right;font-weight:700" id="weight-display-{{ g.id }}">
+            {{ "%.0f"|format(g.weightage) }}%
+          </td>
+          {% if sheet.status == 'submitted' %}
+          <td style="text-align:center">
+            <button class="btn btn-secondary btn-sm"
+                    onclick="openEditRow({{ g.id }}, {{ g.target_value }}, {{ g.weightage }})">
+              ✎
+            </button>
+          </td>
+          {% endif %}
+        </tr>
+        {# Inline edit row — hidden by default #}
+        {% if sheet.status == 'submitted' %}
+        <tr id="edit-row-{{ g.id }}" style="display:none;background:var(--blue-bg)">
+          <td colspan="5" style="padding:.75rem 1rem">
+            <span style="font-size:.8125rem;color:var(--blue);font-weight:600">
+              Editing: {{ g.title }}
+            </span>
+          </td>
+          <td style="padding:.5rem .75rem">
+            <form method="post"
+                  action="/manager/approvals/{{ sheet.id }}/goals/{{ g.id }}/edit"
+                  id="edit-form-{{ g.id }}">
+              <input type="number" name="target_value" id="tv-{{ g.id }}"
+                     class="form-input" style="width:100px;display:inline-block"
+                     step="any" min="0" value="{{ g.target_value }}" required>
+          </td>
+          <td style="padding:.5rem .75rem">
+              <input type="number" name="weightage" id="wt-{{ g.id }}"
+                     class="form-input" style="width:80px;display:inline-block"
+                     step="1" min="10" max="100" value="{{ g.weightage }}" required>
+              <span style="margin-left:4px;font-size:.8125rem">%</span>
+          </td>
+          <td style="padding:.5rem .75rem;text-align:center">
+            <div class="btn-group" style="gap:.375rem;justify-content:center">
+              <button type="submit" class="btn btn-primary btn-sm" form="edit-form-{{ g.id }}">✓</button>
+              <button type="button" class="btn btn-secondary btn-sm"
+                      onclick="closeEditRow({{ g.id }})">✕</button>
+            </div>
+            </form>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="background:var(--bg-page)">
+          <td colspan="{% if sheet.status == 'submitted' %}6{% else %}6{% endif %}"
+              style="text-align:right;font-weight:700;padding:.75rem 1rem">
+            Total Weightage
+          </td>
+          <td style="text-align:right;font-weight:800;font-size:1rem;padding:.75rem 1rem;
+              color:{% if total_weight == 100 %}var(--green){% elif total_weight > 100 %}var(--red){% else %}var(--yellow){% endif %}"
+              id="total-weight-display">
+            {{ "%.0f"|format(total_weight) }}%
+          </td>
+          {% if sheet.status == 'submitted' %}<td></td>{% endif %}
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+{# ═══ Approve / Return Action Panel ═══════════════════════════════════════ #}
+{% if sheet.status == 'submitted' %}
+<div class="action-panel">
+  <div class="action-panel-inner">
+
+    {# Approve side #}
+    <div class="action-half action-approve">
+      <div class="action-half-title">✓ Approve Goal Sheet</div>
+      <p class="action-half-desc">
+        Goals will be <strong>locked</strong> and the employee will be notified.
+        {% if not can_approve %}
+          <span style="color:var(--red)">Fix validation errors above first.</span>
+        {% endif %}
+      </p>
+      <form method="post" action="/manager/approvals/{{ sheet.id }}/approve"
+            onsubmit="return confirm('Approve and lock {{ employee.name }}\'s goal sheet?')">
+        <div class="form-group">
+          <label class="form-label">Comments (optional)</label>
+          <textarea name="manager_comments" class="form-textarea" rows="2"
+                    placeholder="Any notes for the employee…" maxlength="500"></textarea>
+        </div>
+        <button type="submit" class="btn btn-success btn-full"
+                {% if not can_approve %}disabled title="Fix validation errors first"{% endif %}>
+          ✓ Approve &amp; Lock
+        </button>
+      </form>
+    </div>
+
+    <div class="action-divider"></div>
+
+    {# Return side #}
+    <div class="action-half action-return">
+      <div class="action-half-title">↩ Return for Revision</div>
+      <p class="action-half-desc">
+        Employee will be able to edit and resubmit their goals.
+      </p>
+      <form method="post" action="/manager/approvals/{{ sheet.id }}/return"
+            onsubmit="return confirm('Return {{ employee.name }}\'s goal sheet for revision?')">
+        <div class="form-group">
+          <label class="form-label">Return Reason <span class="req">*</span></label>
+          <textarea name="return_reason" class="form-textarea" rows="2"
+                    placeholder="Explain what needs to be changed…"
+                    required maxlength="500"></textarea>
+        </div>
+        <button type="submit" class="btn btn-danger btn-full">
+          ↩ Return for Revision
+        </button>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+{% elif sheet.status == 'approved' %}
+<div class="flash flash-success" style="margin:0 0 1.25rem">
+  ✓ Approved on {{ sheet.approved_at.strftime('%d %b %Y, %H:%M') if sheet.approved_at else '—' }}
+  by {{ user.name }}.
+  {% if sheet.manager_comments %}
+    <br><span style="opacity:.85">Comments: {{ sheet.manager_comments }}</span>
+  {% endif %}
+</div>
+
+{% elif sheet.status == 'returned' %}
+<div class="flash flash-error" style="margin:0 0 1.25rem">
+  ↩ Returned on {{ sheet.submitted_at.strftime('%d %b %Y') if sheet.submitted_at else '—' }}.
+  Reason: {{ sheet.return_reason or '—' }}
+</div>
+
+{% elif sheet.status == 'draft' %}
+<div class="flash flash-info" style="margin:0 0 1.25rem">
+  ℹ This sheet is still in draft — the employee has not submitted it yet.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openEditRow(goalId, targetVal, weightage) {
+  // Hide any other open edit rows first
+  document.querySelectorAll('[id^="edit-row-"]').forEach(r => r.style.display = 'none');
+  document.getElementById(`edit-row-${goalId}`).style.display = '';
+  document.getElementById(`tv-${goalId}`).value = targetVal;
+  document.getElementById(`wt-${goalId}`).value = weightage;
+  document.getElementById(`tv-${goalId}`).focus();
+}
+
+function closeEditRow(goalId) {
+  document.getElementById(`edit-row-${goalId}`).style.display = 'none';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('[id^="edit-row-"]').forEach(r => r.style.display = 'none');
+  }
+});
+</script>
 {% endblock %}

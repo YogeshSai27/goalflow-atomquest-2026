@@ -1,9 +1,113 @@
 {% extends "base.html" %}
-{% block title %}Pending Approvals{% endblock %}
-{% block page_title %}Pending Approvals{% endblock %}
+{% block title %}Approvals{% endblock %}
+{% block page_title %}Goal Sheet Approvals{% endblock %}
+
 {% block content %}
-<div class="placeholder-card">
-  <h2>Pending Goal Approvals</h2>
-  <p>Module implementation pending — Phase 3.</p>
+
+{# ═══ Status Tabs ═════════════════════════════════════════════════════════ #}
+<div class="tab-bar">
+  <a href="/manager/approvals?status_filter=submitted"
+     class="tab-item {% if active_tab == 'submitted' %}tab-active{% endif %}">
+    Pending
+    {% if counts.submitted > 0 %}
+      <span class="tab-badge tab-badge-yellow">{{ counts.submitted }}</span>
+    {% endif %}
+  </a>
+  <a href="/manager/approvals?status_filter=returned"
+     class="tab-item {% if active_tab == 'returned' %}tab-active{% endif %}">
+    Returned
+    {% if counts.returned > 0 %}
+      <span class="tab-badge tab-badge-red">{{ counts.returned }}</span>
+    {% endif %}
+  </a>
+  <a href="/manager/approvals?status_filter=approved"
+     class="tab-item {% if active_tab == 'approved' %}tab-active{% endif %}">
+    Approved
+    {% if counts.approved > 0 %}
+      <span class="tab-badge tab-badge-green">{{ counts.approved }}</span>
+    {% endif %}
+  </a>
+  <a href="/manager/approvals?status_filter=all"
+     class="tab-item {% if active_tab == 'all' %}tab-active{% endif %}">
+    All ({{ counts.all }})
+  </a>
 </div>
+
+{# ═══ Sheets Table ════════════════════════════════════════════════════════ #}
+<div class="card" style="padding:0">
+  {% if sheets %}
+  <div class="table-wrapper" style="border:none;border-radius:0">
+    <table>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Department</th>
+          <th>Submitted</th>
+          <th style="text-align:center">Goals</th>
+          <th style="text-align:right">Weightage</th>
+          <th style="text-align:center">Status</th>
+          <th style="text-align:center">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in sheets %}
+        <tr>
+          <td>
+            <div style="font-weight:600">{{ row.employee.name }}</div>
+            <div style="font-size:.75rem;color:var(--text-muted)">{{ row.employee.email }}</div>
+          </td>
+          <td style="color:var(--text-secondary)">{{ row.employee.department or '—' }}</td>
+          <td style="color:var(--text-secondary)">
+            {{ row.sheet.submitted_at.strftime('%d %b %Y, %H:%M') if row.sheet.submitted_at else '—' }}
+          </td>
+          <td style="text-align:center">{{ row.goal_count }}</td>
+          <td style="text-align:right;font-weight:700;
+              color:{% if row.total_weight == 100 %}var(--green)
+                    {% elif row.total_weight > 100 %}var(--red)
+                    {% else %}var(--yellow){% endif %}">
+            {{ "%.0f"|format(row.total_weight) }}%
+          </td>
+          <td style="text-align:center">
+            <span class="badge badge-{{ row.sheet.status }}">
+              {{ row.sheet.status | capitalize }}
+            </span>
+          </td>
+          <td style="text-align:center">
+            <a href="/manager/approvals/{{ row.sheet.id }}"
+               class="btn btn-{% if row.sheet.status == 'submitted' %}primary{% else %}secondary{% endif %} btn-sm">
+              {% if row.sheet.status == 'submitted' %}Review{% else %}View{% endif %}
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state" style="padding:3rem">
+    <div class="empty-state-icon">
+      {% if active_tab == 'submitted' %}⏳
+      {% elif active_tab == 'approved' %}✓
+      {% elif active_tab == 'returned' %}↩
+      {% else %}◈{% endif %}
+    </div>
+    <div class="empty-state-title">
+      {% if active_tab == 'submitted' %}No pending approvals
+      {% elif active_tab == 'approved' %}No approved sheets yet
+      {% elif active_tab == 'returned' %}No returned sheets
+      {% else %}No goal sheets found{% endif %}
+    </div>
+    <div class="empty-state-desc">
+      {% if active_tab == 'submitted' %}
+        Your team members haven't submitted their goal sheets yet.
+      {% elif active_tab == 'approved' %}
+        Once you approve goal sheets they will appear here.
+      {% else %}
+        Nothing to show for this filter.
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
 {% endblock %}

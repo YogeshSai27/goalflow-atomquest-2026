@@ -1,9 +1,172 @@
 {% extends "base.html" %}
 {% block title %}Manager Dashboard{% endblock %}
 {% block page_title %}Manager Dashboard{% endblock %}
+
 {% block content %}
-<div class="placeholder-card">
-  <h2>Manager Attention Dashboard</h2>
-  <p>Module implementation pending — Phase 3.</p>
+
+{# ═══ Attention Stat Cards ════════════════════════════════════════════════ #}
+<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+
+  <div class="stat-card stat-yellow">
+    <div class="stat-label">Pending Approval</div>
+    <div class="stat-value">{{ pending_count }}</div>
+    <div class="stat-sub">
+      {% if pending_count > 0 %}
+        <a href="/manager/approvals?status_filter=submitted"
+           style="color:var(--yellow);font-weight:600">Review now →</a>
+      {% else %}
+        All caught up
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-card stat-red">
+    <div class="stat-label">Returned for Revision</div>
+    <div class="stat-value">{{ returned_count }}</div>
+    <div class="stat-sub">
+      {% if returned_count > 0 %}
+        <a href="/manager/approvals?status_filter=returned"
+           style="color:var(--red);font-weight:600">View returned →</a>
+      {% else %}
+        None returned
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-card stat-green">
+    <div class="stat-label">Approved</div>
+    <div class="stat-value">{{ approved_count }}</div>
+    <div class="stat-sub">
+      <a href="/manager/approvals?status_filter=approved"
+         style="color:var(--green);font-weight:600">View approved →</a>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Total Direct Reports</div>
+    <div class="stat-value">{{ total_reports }}</div>
+    <div class="stat-sub">
+      <a href="/manager/approvals?status_filter=all"
+         style="color:var(--brand-primary);font-weight:600">All sheets →</a>
+    </div>
+  </div>
+
 </div>
+
+{# ═══ Action Required ══════════════════════════════════════════════════════ #}
+{% if action_needed %}
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">⚡ Action Required — Pending Approvals</span>
+    <a href="/manager/approvals?status_filter=submitted" class="btn btn-secondary btn-sm">
+      View All ({{ pending_count }})
+    </a>
+  </div>
+  <div class="table-wrapper" style="border:none;border-radius:0">
+    <table>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Submitted</th>
+          <th style="text-align:center">Goals</th>
+          <th style="text-align:right">Weightage</th>
+          <th style="text-align:center">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in action_needed %}
+        {% set goals = s.goals %}
+        {% set total_w = goals | sum(attribute='weightage') %}
+        <tr>
+          <td>
+            <div style="font-weight:600">{{ s.employee.name }}</div>
+            <div style="font-size:.75rem;color:var(--text-muted)">{{ s.employee.department or '' }}</div>
+          </td>
+          <td style="color:var(--text-secondary)">
+            {{ s.submitted_at.strftime('%d %b %Y') if s.submitted_at else '—' }}
+          </td>
+          <td style="text-align:center">{{ goals | length }}</td>
+          <td style="text-align:right;font-weight:700;
+              color:{% if total_w == 100 %}var(--green){% else %}var(--red){% endif %}">
+            {{ "%.0f"|format(total_w) }}%
+          </td>
+          <td style="text-align:center">
+            <a href="/manager/approvals/{{ s.id }}" class="btn btn-primary btn-sm">Review</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-state-icon">✓</div>
+    <div class="empty-state-title">No pending approvals</div>
+    <div class="empty-state-desc">
+      All submitted goal sheets have been reviewed.
+      <a href="/manager/approvals?status_filter=all">View all sheets →</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ═══ Team Overview ════════════════════════════════════════════════════════ #}
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Team Goal Sheet Status</span>
+  </div>
+  {% set reports = user.direct_reports %}
+  {% if reports %}
+  <div class="table-wrapper" style="border:none;border-radius:0">
+    <table>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Department</th>
+          <th style="text-align:center">Sheet Status</th>
+          <th style="text-align:center">Goals</th>
+          <th style="text-align:center">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for emp in reports %}
+        {% set emp_sheet = emp.goal_sheets | sort(attribute='created_at', reverse=True) | first if emp.goal_sheets else none %}
+        <tr>
+          <td><strong>{{ emp.name }}</strong></td>
+          <td style="color:var(--text-secondary)">{{ emp.department or '—' }}</td>
+          <td style="text-align:center">
+            {% if emp_sheet %}
+              <span class="badge badge-{{ emp_sheet.status }}">{{ emp_sheet.status | capitalize }}</span>
+            {% else %}
+              <span class="badge badge-not_started">No Sheet</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center">
+            {{ emp_sheet.goals | length if emp_sheet else '—' }}
+          </td>
+          <td style="text-align:center">
+            {% if emp_sheet and emp_sheet.status == 'submitted' %}
+              <a href="/manager/approvals/{{ emp_sheet.id }}" class="btn btn-primary btn-sm">Review</a>
+            {% elif emp_sheet %}
+              <a href="/manager/approvals/{{ emp_sheet.id }}" class="btn btn-secondary btn-sm">View</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◈</div>
+    <div class="empty-state-title">No direct reports assigned</div>
+    <div class="empty-state-desc">Contact HR Admin to assign employees to your team.</div>
+  </div>
+  {% endif %}
+</div>
+
 {% endblock %}

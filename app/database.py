@@ -43,3 +43,23 @@ def init_db():
     # Import models so SQLAlchemy registers them before create_all
     import app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    _migrate()
+
+
+def _migrate():
+    """
+    Safe column additions for databases created before a model change.
+    SQLite does not support DROP/ALTER beyond ADD COLUMN.
+    Each statement is wrapped so it no-ops if the column already exists.
+    """
+    migrations = [
+        "ALTER TABLE goal_sheets ADD COLUMN manager_comments TEXT",
+        "ALTER TABLE goal_sheets ADD COLUMN return_reason TEXT",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(__import__("sqlalchemy").text(sql))
+                conn.commit()
+            except Exception:
+                pass  # column already exists — safe to ignore
